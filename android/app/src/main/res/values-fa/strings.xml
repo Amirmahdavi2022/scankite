@@ -33,12 +33,7 @@
     <string name="copied">کپی شد</string>
     <string name="copied_all">%1$d کانفیگ کپی شد</string>
 
-    <string name="settings">تنظیمات</string>
-    <string name="tag_label">اسم خودت روی کانفیگ‌ها</string>
-    <string name="tag_hint">خالی بگذار تا بی‌اسم بماند</string>
-    <string name="tag_note">اسم کانالی که استخر روی کانفیگ زده در هر حالت پاک می‌شود. این فقط تعیین می‌کند چه چیزی جایش بنشیند.</string>
     <string name="language">English</string>
-    <string name="save">ذخیره</string>
 
     <string name="ms">%1$d میلی‌ثانیه</string>
     <string name="via">از راه %1$s</string>

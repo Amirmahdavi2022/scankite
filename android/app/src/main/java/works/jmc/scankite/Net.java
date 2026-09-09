@@ -47,7 +47,8 @@ final class Net {
      * idea whose traffic this is and answers with its own error page.
      */
     static TunnelProbe.Result probe(ProxyConfig config, String edge, int port, int timeoutMs) {
-        String hostname = CdnFront.hostname(config);
+        String hostname = CdnFront.sniOf(config);
+        String route = CdnFront.hostOf(config);
         if (hostname.isEmpty()) {
             return new TunnelProbe.Result(TunnelProbe.Stage.NO_SOCKET, 0, "no hostname");
         }
@@ -70,7 +71,7 @@ final class Net {
             tls.setSoTimeout(timeoutMs);
             tls.startHandshake();
 
-            TunnelProbe.Result result = TunnelProbe.run(config, hostname,
+            TunnelProbe.Result result = TunnelProbe.run(config, hostname, route,
                     tls.getInputStream(), tls.getOutputStream(), new Random());
             try { tls.close(); } catch (Exception ignored) { }
             return result;

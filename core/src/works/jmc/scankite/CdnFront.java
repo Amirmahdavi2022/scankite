@@ -73,13 +73,36 @@ public final class CdnFront {
      * explicitly here, whether or not they were there before.
      */
     public static ProxyConfig front(ProxyConfig config, String edge, int port) {
-        String hostname = hostname(config);
-        ProxyConfig out = config.withAddress(edge, port)
-                                .withParam("sni", hostname)
-                                .withParam("host", hostname);
-        // grpc names its route differently and has no Host header to carry.
-        if ("grpc".equals(config.transport())) out = out.withParam("host", config.get("host"));
-        return out;
+        // Whatever the link stated is kept exactly. Only the ones it left out get filled in, and
+        // they are filled from the ORIGINAL ADDRESS, which is what the client would have used.
+        //
+        // These two are not interchangeable and cross-filling them breaks the config in the
+        // quietest possible way. A quarter of the frontable entries in a real pool set them to
+        // different values: sni picks the certificate, host picks the route at the far end. Copy
+        // one over the other and the handshake still succeeds, the origin still answers the
+        // upgrade, and then nothing is ever routed — a connection that pings and carries nothing.
+        return config.withAddress(edge, port)
+                     .withParam("sni", sniOf(config))
+                     .withParam("host", hostOf(config));
+    }
+
+    /** The name the certificate must match. */
+    public static String sniOf(ProxyConfig config) {
+        String sni = config.get("sni").trim();
+        return sni.isEmpty() ? implicit(config) : sni;
+    }
+
+    /** The name the far end routes on, which grpc does not carry at all. */
+    public static String hostOf(ProxyConfig config) {
+        if ("grpc".equals(config.transport())) return config.get("host").trim();
+        String host = config.get("host").trim();
+        if (host.indexOf(',') > 0) host = host.substring(0, host.indexOf(',')).trim();
+        return host.isEmpty() ? implicit(config) : host;
+    }
+
+    /** What the client would have used when the link named neither: the address itself. */
+    private static String implicit(ProxyConfig config) {
+        return isHostname(config.address) ? config.address : "";
     }
 
     /** Whether an address is a name rather than a literal. Only names can front a CDN. */

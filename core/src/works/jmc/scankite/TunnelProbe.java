@@ -37,9 +37,11 @@ public final class TunnelProbe {
      */
     public static final String TARGET_HOST = "www.gstatic.com";
     public static final int TARGET_PORT = 80;
-    private static final String TARGET_REQUEST =
-            "GET /generate_204 HTTP/1.1\r\nHost: www.gstatic.com\r\n"
-                    + "User-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n";
+    private static String request(boolean last) {
+        return "GET /generate_204 HTTP/1.1\r\nHost: www.gstatic.com\r\n"
+                + "User-Agent: Mozilla/5.0\r\nConnection: "
+                + (last ? "close" : "keep-alive") + "\r\n\r\n";
+    }
 
     /** How far a probe got, which is the only thing that separates the failure modes. */
     public enum Stage {
@@ -83,54 +85,67 @@ public final class TunnelProbe {
      * Runs the whole exchange over an already-connected stream pair. The caller owns the socket
      * and the TLS, which keeps every byte of this testable against a stub.
      */
-    public static Result run(ProxyConfig config, String host, InputStream in, OutputStream out,
-                             Random random) {
+    public static Result run(ProxyConfig config, String sni, String host, InputStream in,
+                             OutputStream out, Random random) {
         long started = System.currentTimeMillis();
         try {
-            Ws ws = Ws.open(in, out, host, config.get("path"), random);
+            // The Host header is the routing name at the far end, and it is not always the same
+            // as the name in the certificate. Passing the wrong one here would make the probe
+            // disagree with the config it is meant to be testing.
+            Ws ws = Ws.open(in, out, host.isEmpty() ? sni : host, config.get("path"), random);
 
             byte[] header = "trojan".equals(config.protocol)
                     ? trojanHeader(config.id)
                     : vlessHeader(config.id);
             ByteArrayOutputStream first = new ByteArrayOutputStream();
             first.write(header);
-            first.write(TARGET_REQUEST.getBytes(StandardCharsets.ISO_8859_1));
+            first.write(request(false).getBytes(StandardCharsets.ISO_8859_1));
             ws.send(first.toByteArray());
 
-            // The reply can arrive split across frames, and the first one carries the protocol's
-            // own response header ahead of the payload. Read until there is something to judge.
-            ByteArrayOutputStream body = new ByteArrayOutputStream();
-            boolean firstFrame = true;
-            for (int frames = 0; frames < 8; frames++) {
-                byte[] payload = ws.receive();
-                if (payload == null) break;
-                byte[] usable = payload;
-                if (firstFrame && "vless".equals(config.protocol)) {
-                    usable = stripVlessResponse(payload);
-                    if (usable == null) {
-                        return new Result(Stage.NO_TRAFFIC,
-                                System.currentTimeMillis() - started, "malformed vless response");
-                    }
-                }
-                firstFrame = false;
-                body.write(usable);
-                String text = body.toString("ISO-8859-1");
-                if (text.contains("\r\n") || text.length() > 64) {
-                    if (text.startsWith("HTTP/1")) {
-                        return new Result(Stage.WORKING, System.currentTimeMillis() - started,
-                                text.substring(0, Math.min(15, text.length())).trim());
-                    }
-                    return new Result(Stage.NO_TRAFFIC, System.currentTimeMillis() - started,
-                            "answered with something that is not http");
-                }
+            String reply = readReply(ws, "vless".equals(config.protocol));
+            if (reply == null || !reply.startsWith("HTTP/1")) {
+                return new Result(Stage.NO_TRAFFIC, System.currentTimeMillis() - started,
+                        reply == null ? "tunnel opened, nothing came back" : "not http");
             }
-            return new Result(Stage.NO_TRAFFIC, System.currentTimeMillis() - started,
-                    "tunnel opened, nothing came back");
+
+            // A second round trip on the same tunnel, because the first one proves less than it
+            // looks. Plenty of these servers accept a connection, answer once and then stall,
+            // which in a client reads as a connection that pings and never carries anything.
+            // One exchange cannot tell that apart from a healthy endpoint; two can.
+            ws.send(request(true).getBytes(StandardCharsets.ISO_8859_1));
+            String second = readReply(ws, false);
+            if (second == null || !second.startsWith("HTTP/1")) {
+                return new Result(Stage.NO_TRAFFIC, System.currentTimeMillis() - started,
+                        "answered once and then stalled");
+            }
+            return new Result(Stage.WORKING, System.currentTimeMillis() - started,
+                    second.substring(0, Math.min(15, second.length())).trim());
         } catch (IOException failure) {
             String message = failure.getMessage() == null ? "" : failure.getMessage();
             Stage stage = message.startsWith("no upgrade") ? Stage.NO_UPGRADE : Stage.NO_TRAFFIC;
             return new Result(stage, System.currentTimeMillis() - started, message);
         }
+    }
+
+    /** Reads frames until a whole HTTP head has arrived, or the far side gives up. */
+    private static String readReply(Ws ws, boolean stripHeader) throws IOException {
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        boolean first = true;
+        for (int frames = 0; frames < 12; frames++) {
+            byte[] payload = ws.receive();
+            if (payload == null) break;
+            byte[] usable = payload;
+            if (first && stripHeader) {
+                usable = stripVlessResponse(payload);
+                if (usable == null) return null;
+            }
+            first = false;
+            body.write(usable);
+            String text = body.toString("ISO-8859-1");
+            if (text.contains("\r\n\r\n") || text.length() > 512) return text;
+        }
+        String text = body.toString("ISO-8859-1");
+        return text.isEmpty() ? null : text;
     }
 
     // ---------------------------------------------------------------- protocols

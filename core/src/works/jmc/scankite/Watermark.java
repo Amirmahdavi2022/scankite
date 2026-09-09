@@ -88,15 +88,6 @@ public final class Watermark {
         return collapse(out.toString());
     }
 
-    /**
-     * The name to publish under. A tag of your own if you set one, otherwise nothing —
-     * an unlabelled config is honest, and the client numbers them anyway.
-     */
-    public static String rename(String tag, int index) {
-        if (tag == null || tag.trim().isEmpty()) return "";
-        return tag.trim() + " " + index;
-    }
-
     // ---------------------------------------------------------------- internals
 
     /** Labels are conventionally cut up by pipes, dashes and brackets rather than spaces. */

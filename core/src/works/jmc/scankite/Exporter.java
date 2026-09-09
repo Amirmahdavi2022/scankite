@@ -33,24 +33,30 @@ public final class Exporter {
 
     private Exporter() { }
 
-    /** One entry, cleaned and renamed. Index numbers the output, not the input. */
-    public static ProxyConfig clean(ProxyConfig config, String tag, int index) {
+    /**
+     * One entry, cleaned and left unnamed.
+     *
+     * <p>Nothing goes on in place of the branding that came off. Putting our own name there
+     * would be the same trick with a different name on it, and the client numbers the list
+     * anyway.
+     */
+    public static ProxyConfig clean(ProxyConfig config, int index) {
         ProxyConfig out = config;
         for (String name : REJECTED) out = out.withParam(name, "");
-        return out.withLabel(Watermark.rename(tag, index));
+        return out.withLabel("");
     }
 
     /**
      * The subscription body. Deduplicated on the link itself, so the same server entered through
      * two different addresses is kept — that is the whole point — while an exact repeat is not.
      */
-    public static String subscription(List<ProxyConfig> results, String tag) {
+    public static String subscription(List<ProxyConfig> results) {
         List<String> lines = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         int index = 1;
         for (ProxyConfig config : results) {
             if (config == null) continue;
-            String uri = clean(config, tag, index).toUri();
+            String uri = clean(config, index).toUri();
             String identity = uri.contains("#") ? uri.substring(0, uri.lastIndexOf('#')) : uri;
             if (!seen.add(identity)) continue;
             lines.add(uri);
@@ -66,8 +72,8 @@ public final class Exporter {
      * pools use. Those are how a subscription puts somebody's channel name at the top of your
      * client, and adding our own would be the same trick with a different name on it.
      */
-    public static String encoded(List<ProxyConfig> results, String tag) {
+    public static String encoded(List<ProxyConfig> results) {
         return Base64.getEncoder().encodeToString(
-                subscription(results, tag).getBytes(StandardCharsets.UTF_8));
+                subscription(results).getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -33,12 +33,7 @@
     <string name="copied">Copied</string>
     <string name="copied_all">%1$d configs copied</string>
 
-    <string name="settings">Settings</string>
-    <string name="tag_label">Your own name on the configs</string>
-    <string name="tag_hint">leave empty for none</string>
-    <string name="tag_note">Whatever channel name the pool stamped on a config is removed either way. This only decides what goes on instead.</string>
     <string name="language">فارسی</string>
-    <string name="save">Save</string>
 
     <string name="ms">%1$d ms</string>
     <string name="via">via %1$s</string>

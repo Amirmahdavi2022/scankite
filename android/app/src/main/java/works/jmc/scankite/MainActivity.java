@@ -5,7 +5,6 @@
 package works.jmc.scankite;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -14,11 +13,9 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.InputType;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -40,7 +37,6 @@ public final class MainActivity extends Activity implements Engine.Watcher {
 
     private static final String PREFS = "scankite";
     private static final String KEY_LANGUAGE = "language";
-    private static final String KEY_TAG = "tag";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final List<Engine.Result> results = new ArrayList<>();
@@ -101,7 +97,6 @@ public final class MainActivity extends Activity implements Engine.Watcher {
 
         action.setOnClickListener(view -> { if (running) stop(); else start(); });
         findViewById(R.id.language).setOnClickListener(view -> toggleLanguage());
-        findViewById(R.id.settings).setOnClickListener(view -> settings());
         findViewById(R.id.copy_all).setOnClickListener(view -> copyAll(false));
         findViewById(R.id.copy_sub).setOnClickListener(view -> copyAll(true));
     }
@@ -209,7 +204,7 @@ public final class MainActivity extends Activity implements Engine.Watcher {
         ((TextView) row.findViewById(R.id.latency))
                 .setText(getString(R.string.ms, (int) result.millis));
         row.findViewById(R.id.copy).setOnClickListener(view -> {
-            copy(Exporter.clean(result.config, tag(), rank).toUri());
+            copy(Exporter.clean(result.config, rank).toUri());
             toast(getString(R.string.copied));
         });
         list.addView(row);
@@ -218,9 +213,7 @@ public final class MainActivity extends Activity implements Engine.Watcher {
     private void copyAll(boolean asSubscription) {
         List<ProxyConfig> configs = new ArrayList<>();
         for (Engine.Result result : results) configs.add(result.config);
-        copy(asSubscription
-                ? Exporter.encoded(configs, tag())
-                : Exporter.subscription(configs, tag()));
+        copy(asSubscription ? Exporter.encoded(configs) : Exporter.subscription(configs));
         toast(getString(R.string.copied_all, configs.size()));
     }
 
@@ -234,43 +227,4 @@ public final class MainActivity extends Activity implements Engine.Watcher {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
-    // ---------------------------------------------------------------- settings
-
-    private String tag() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_TAG, "");
-    }
-
-    private void settings() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (20 * getResources().getDisplayMetrics().density);
-        box.setPadding(pad, pad / 2, pad, 0);
-
-        TextView label = new TextView(this);
-        label.setText(R.string.tag_label);
-        label.setTextSize(14);
-        box.addView(label);
-
-        EditText field = new EditText(this);
-        field.setSingleLine(true);
-        field.setInputType(InputType.TYPE_CLASS_TEXT);
-        field.setHint(R.string.tag_hint);
-        field.setText(tag());
-        box.addView(field);
-
-        TextView note = new TextView(this);
-        note.setText(R.string.tag_note);
-        note.setTextSize(12);
-        note.setPadding(0, pad / 3, 0, 0);
-        box.addView(note);
-
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.settings)
-                .setView(box)
-                .setPositiveButton(R.string.save, (dialog, which) ->
-                        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                                .putString(KEY_TAG, field.getText().toString().trim()).apply())
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-    }
 }

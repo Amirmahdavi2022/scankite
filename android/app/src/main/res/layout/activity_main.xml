@@ -57,20 +57,7 @@
             android:textColor="@color/ink"
             android:textSize="13sp" />
 
-        <Button
-            android:id="@+id/settings"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:minWidth="0dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:background="@drawable/bg_ghost"
-            android:text="@string/settings"
-            android:textAllCaps="false"
-            android:textColor="@color/ink"
-            android:textSize="13sp" />
+
     </LinearLayout>
 
     <!-- status card -->

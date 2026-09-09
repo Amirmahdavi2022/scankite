@@ -155,9 +155,6 @@ public final class Tests {
         check("config line is not", false,
                 Watermark.isDirective("vless://a@b.com:443"));
 
-        check("own tag applied", "JMC 7", Watermark.rename("JMC", 7));
-        check("no tag means no name", "", Watermark.rename("", 7));
-        check("blank tag means no name", "", Watermark.rename("   ", 7));
     }
 
     // ---------------------------------------------------------------- fronting
@@ -209,6 +206,28 @@ public final class Tests {
         check("vmess address swapped", "104.16.5.9", reread.address);
         check("vmess port swapped", 2053, reread.port);
         check("vmess host preserved", "c.example.com", reread.get("host"));
+
+        // A quarter of the frontable entries in a real pool name these two differently. Copying
+        // one over the other leaves a config that connects, pings, and routes nothing.
+        ProxyConfig split = ProxyConfig.parse(
+                "vless://u@edge.example.com:443?security=tls&type=ws"
+                        + "&sni=cert.example.com&host=route.example.net&path=%2Fp#n");
+        ProxyConfig frontedSplit = CdnFront.front(split, "104.16.5.9", 443);
+        check("sni kept as published", "cert.example.com", frontedSplit.get("sni"));
+        check("host kept as published", "route.example.net", frontedSplit.get("host"));
+        check("sni is not copied over host", false,
+                frontedSplit.get("host").equals(frontedSplit.get("sni")));
+
+        ProxyConfig sniOnly = ProxyConfig.parse(
+                "vless://u@real.example.com:443?security=tls&type=ws&sni=cert.example.com#n");
+        ProxyConfig frontedSniOnly = CdnFront.front(sniOnly, "104.16.5.9", 443);
+        check("a missing host comes from the original address, not from sni",
+                "real.example.com", frontedSniOnly.get("host"));
+        check("the stated sni still wins", "cert.example.com", frontedSniOnly.get("sni"));
+
+        ProxyConfig multi = ProxyConfig.parse(
+                "vless://u@a.com:443?security=tls&type=ws&host=one.com%2Ctwo.com#n");
+        check("only the first host is used", "one.com", CdnFront.hostOf(multi));
 
         check("443 is a tls port", true, CdnFront.isTlsPort(443));
         check("2053 is a tls port", true, CdnFront.isTlsPort(2053));
@@ -301,11 +320,11 @@ public final class Tests {
         // refuses — indistinguishable, from the outside, from servers that are simply dead.
         ProxyConfig unsafe = ProxyConfig.parse(
                 "vless://u@a.com:443?security=tls&type=ws&allowInsecure=1&insecure=0&host=a.com#n");
-        ProxyConfig cleaned = Exporter.clean(unsafe, "JMC", 1);
+        ProxyConfig cleaned = Exporter.clean(unsafe, 1);
         check("allowInsecure removed", "", cleaned.get("allowInsecure"));
         check("insecure removed", "", cleaned.get("insecure"));
         check("everything else kept", "ws", cleaned.transport());
-        check("renamed", "JMC 1", cleaned.label);
+        check("left unnamed", "", cleaned.label);
         check("rejected params gone from the link", false,
                 cleaned.toUri().toLowerCase(java.util.Locale.US).contains("insecure"));
 
@@ -316,22 +335,20 @@ public final class Tests {
         results.add(CdnFront.front(base, "172.64.0.1", 443));   // same server, another door
         results.add(CdnFront.front(base, "104.16.0.1", 443));   // an exact repeat
 
-        String subscription = Exporter.subscription(results, "JMC");
+        String subscription = Exporter.subscription(results);
         check("exact repeat folded away", 2, subscription.split("\n").length);
         check("two doors both kept", true,
                 subscription.contains("104.16.0.1") && subscription.contains("172.64.0.1"));
-        check("numbering runs over the output", true, subscription.contains("JMC%202"));
         check("nobody else's channel survives", false, subscription.contains("somechannel"));
         check("no subscription headers", false, subscription.contains("profile-title"));
 
-        String untagged = Exporter.subscription(results, "");
-        check("no tag means no names", false, untagged.contains("#"));
+        check("nothing is put back in place of the branding", false, subscription.contains("#"));
 
         check("base64 output decodes back", true,
-                new String(java.util.Base64.getDecoder().decode(Exporter.encoded(results, "JMC")),
+                new String(java.util.Base64.getDecoder().decode(Exporter.encoded(results)),
                         java.nio.charset.StandardCharsets.UTF_8).startsWith("vless://"));
         check("empty input is empty output", "",
-                Exporter.subscription(new java.util.ArrayList<ProxyConfig>(), "JMC"));
+                Exporter.subscription(new java.util.ArrayList<ProxyConfig>()));
     }
 
     // ---------------------------------------------------------------- tunnelling
@@ -391,12 +408,15 @@ public final class Tests {
                 "trojan://hunter2@cdn.example.com:443?security=tls&type=ws&path=%2Fws#n");
         check("trojan proves too", TunnelProbe.Stage.WORKING, stub(trojan, StubMode.HEALTHY).stage);
 
+        check("a server that answers once and then stalls is not working",
+                TunnelProbe.Stage.NO_TRAFFIC, stub(vless, StubMode.ONE_THEN_STALL).stage);
+
         check("the host header carries the real name, not the address", "cdn.example.com",
                 lastHost);
         check("the path is requested as published", "/ws", lastPath);
     }
 
-    enum StubMode { HEALTHY, SILENT, REFUSE, WRONG_UUID }
+    enum StubMode { HEALTHY, SILENT, REFUSE, WRONG_UUID, ONE_THEN_STALL }
 
     static volatile String lastHost = "";
     static volatile String lastPath = "";
@@ -411,7 +431,7 @@ public final class Tests {
 
             try (java.net.Socket socket = new java.net.Socket("127.0.0.1", server.getLocalPort())) {
                 socket.setSoTimeout(5000);
-                return TunnelProbe.run(config, CdnFront.hostname(config),
+                return TunnelProbe.run(config, CdnFront.sniOf(config), CdnFront.hostOf(config),
                         socket.getInputStream(), socket.getOutputStream(), new Random(3));
             }
         } catch (Exception failure) {
@@ -468,6 +488,15 @@ public final class Tests {
                         TunnelProbe.sha224(config.id.getBytes("UTF-8"))))) return;
                 writeFrame(out, "HTTP/1.1 204 No Content\r\n\r\n".getBytes("ISO-8859-1"));
             }
+            out.flush();
+
+            // The second exchange. A server that answers once and then goes quiet is the exact
+            // shape of the endpoint that pings fine in a client and never carries anything.
+            if (readFrame(in) == null || mode == StubMode.ONE_THEN_STALL) {
+                Thread.sleep(150);
+                return;
+            }
+            writeFrame(out, "HTTP/1.1 204 No Content\r\n\r\n".getBytes("ISO-8859-1"));
             out.flush();
             Thread.sleep(80);
         } catch (Exception ignored) {
