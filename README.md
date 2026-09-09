@@ -53,22 +53,42 @@ Both come off. What's kept is the part that describes the server instead of the 
 
 ## Where it is
 
-The core is done and tested. The Android app around it isn't built yet.
+The app builds and runs. **v0.1.0**, debug APK from the `android` workflow — open the latest run and grab `scankite-debug` from the artifacts.
 
-**Done, 125 checks green:**
+One screen. Press the button and it does the rest: reads the pools, pulls Cloudflare's published address list, sweeps for addresses that answer from your phone, then proves configs end to end and hands you the ones that carried a real reply. Copy one, copy all, or copy the lot as a base64 subscription. English and Persian, switchable in the app rather than only in system settings, and the layout flips for RTL.
 
-- parser and writer for vless, vmess, trojan, ss, hysteria2, tuic, including base64-wrapped documents
-- the fronting logic, which is the part that actually decides whether the idea works
-- watermark removal
-- Cloudflare address ranges, with sampling that spreads across /24s instead of walking the space in order
-- export, with the parameters that break current cores taken out
+It's about 44 KB, because there are no dependencies in it at all. Not androidx, not Kotlin, no material library. A single screen doesn't need a support library, and a jar you left out can't break your build.
 
-**Next:**
+**Tested, 143 checks green on a plain JVM:**
 
-- the scanner itself, running on the device
-- real testing through an Xray core rather than a bare TCP connect, because a socket that opens and carries nothing is a failure, not a success
+- the parser and writer, the fronting logic, watermark removal, address ranges, export
+- the WebSocket client, checked against RFC 6455's one fixed handshake value
+- the full probe, run against a stub server that speaks VLESS and Trojan back — including a stub that opens the tunnel and then goes silent, because that's the case a scanner must not report as success
+
+**Not done yet:**
+
 - a byedpi hop, so a handshake being interfered with gets a second chance before the address is written off
-- the UI
+- grpc and xhttp, which are frontable but can't be proved by this probe yet
+- vmess gets swapped and exported, but not proved end to end
+
+## How the search is ordered
+
+Cheapest first, because the expensive step is expensive:
+
+1. **Address list.** Cloudflare's published one, falling back to the built-in copy.
+2. **Credentials.** All six pools at once, saved to disk afterwards. That saved copy is the point: these lists are blocked on exactly the networks where you need them, so a later run still has something to work from.
+3. **Sweep.** Around 900 sampled addresses, two per /24, 40 at a time. Neighbours share a fate, so this throws away most of the space quickly.
+4. **Proof.** Only survivors get here. Pairs are built across both lists rather than nested, so one dead credential can't burn the budget on an address that was fine.
+
+The whole run is on a wall clock. A scan that could in principle finish in twenty minutes has already failed.
+
+### Why the last step has to be that expensive
+
+The cheap tests lie. A TCP connect proves a socket opened, which happens against a black hole. A TLS handshake proves the CDN answered, which it does for every address it owns whether your config is behind it or not. Even the WebSocket upgrade only proves something reached an origin.
+
+None of that is traffic getting through, and the gap is where a filtered connection lives: the handshake completes, then nothing comes back. So the last step speaks the real protocol and asks for a real page over it. There's no cheaper way to know.
+
+One detail that matters there: the probe never asks an endpoint to reach a Cloudflare address. A lot of these servers are Cloudflare Workers, and a Worker can't open a connection to a Cloudflare address at all, so a Cloudflare target fails every healthy Worker-backed endpoint and files it as dead.
 
 ## Two details worth knowing if you're reading the code
 
@@ -78,11 +98,17 @@ The core is done and tested. The Android app around it isn't built yet.
 
 ## Build
 
-Core only, for now. No dependencies, no build system:
+The core needs nothing but a JDK:
 
 ```sh
 javac -d build $(find core/src core/test -name '*.java')
 java -cp build works.jmc.scankite.Tests
+```
+
+The app:
+
+```sh
+cd android && ./gradlew assembleDebug
 ```
 
 There's also a check that runs the core against the live pools, which is kept out of CI because a suite that goes red when somebody else's repository moves teaches you nothing:
