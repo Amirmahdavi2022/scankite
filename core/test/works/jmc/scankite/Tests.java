@@ -22,6 +22,7 @@ public final class Tests {
         ranges();
         sampling();
         exporting();
+        tunnelling();
 
         System.out.println();
         System.out.println(failed == 0
@@ -331,6 +332,182 @@ public final class Tests {
                         java.nio.charset.StandardCharsets.UTF_8).startsWith("vless://"));
         check("empty input is empty output", "",
                 Exporter.subscription(new java.util.ArrayList<ProxyConfig>(), "JMC"));
+    }
+
+    // ---------------------------------------------------------------- tunnelling
+
+    /**
+     * The probe run against a stub that behaves like a real endpoint. Everything below the
+     * protocol is left out on purpose: a socket pair is a socket pair, and the parts worth
+     * testing are the header bytes and the framing.
+     */
+    static void tunnelling() {
+        check("uuid to bytes", 16,
+                TunnelProbe.uuidBytes("11111111-2222-3333-4444-555555555555").length);
+        check("first byte of the uuid", 0x11,
+                TunnelProbe.uuidBytes("11111111-2222-3333-4444-555555555555")[0] & 0xff);
+        check("short uuid refused", null, TunnelProbe.uuidBytes("1234"));
+        check("non-hex uuid refused", null,
+                TunnelProbe.uuidBytes("zzzzzzzz-2222-3333-4444-555555555555"));
+
+        // The one fixed value in RFC 6455. If the accept hash is wrong the upgrade is a lie, and
+        // a middlebox happily answering 101 to anything would otherwise read as success.
+        check("websocket accept hash", "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+                Ws.accept("dGhlIHNhbXBsZSBub25jZQ=="));
+
+        check("vless response header stripped", "hi",
+                new String(TunnelProbe.stripVlessResponse(
+                        new byte[] { 0, 0, 'h', 'i' }), java.nio.charset.StandardCharsets.ISO_8859_1));
+        check("vless addons skipped", "hi",
+                new String(TunnelProbe.stripVlessResponse(
+                        new byte[] { 0, 2, 9, 9, 'h', 'i' }), java.nio.charset.StandardCharsets.ISO_8859_1));
+        check("truncated vless response refused", null,
+                TunnelProbe.stripVlessResponse(new byte[] { 0 }));
+
+        check("vless+ws can be proved", true, TunnelProbe.canProve(ProxyConfig.parse(
+                "vless://11111111-2222-3333-4444-555555555555@a.com:443?security=tls&type=ws#n")));
+        check("grpc cannot be proved here", false, TunnelProbe.canProve(ProxyConfig.parse(
+                "vless://11111111-2222-3333-4444-555555555555@a.com:443?security=tls&type=grpc#n")));
+        check("ss cannot be proved here", false,
+                TunnelProbe.canProve(ProxyConfig.parse("ss://YWVzOnB3@1.2.3.4:80#n")));
+
+        ProxyConfig vless = ProxyConfig.parse(
+                "vless://11111111-2222-3333-4444-555555555555@cdn.example.com:443"
+                        + "?security=tls&type=ws&host=cdn.example.com&path=%2Fws#n");
+        check("a healthy endpoint reads as working",
+                TunnelProbe.Stage.WORKING, stub(vless, StubMode.HEALTHY).stage);
+
+        // The failure that matters. The tunnel opens, the handshake completes, and then nothing
+        // comes back. Reporting that as success is how a scanner hands over a list of dead
+        // configs that all looked fine.
+        check("a silent tunnel is not working",
+                TunnelProbe.Stage.NO_TRAFFIC, stub(vless, StubMode.SILENT).stage);
+        check("a refused upgrade is its own failure",
+                TunnelProbe.Stage.NO_UPGRADE, stub(vless, StubMode.REFUSE).stage);
+        check("wrong credentials do not read as working", false,
+                stub(vless, StubMode.WRONG_UUID).working());
+
+        ProxyConfig trojan = ProxyConfig.parse(
+                "trojan://hunter2@cdn.example.com:443?security=tls&type=ws&path=%2Fws#n");
+        check("trojan proves too", TunnelProbe.Stage.WORKING, stub(trojan, StubMode.HEALTHY).stage);
+
+        check("the host header carries the real name, not the address", "cdn.example.com",
+                lastHost);
+        check("the path is requested as published", "/ws", lastPath);
+    }
+
+    enum StubMode { HEALTHY, SILENT, REFUSE, WRONG_UUID }
+
+    static volatile String lastHost = "";
+    static volatile String lastPath = "";
+
+    /** Runs one probe against a throwaway server on loopback and returns what the probe made of it. */
+    static TunnelProbe.Result stub(ProxyConfig config, StubMode mode) {
+        try (java.net.ServerSocket server = new java.net.ServerSocket(0)) {
+            server.setSoTimeout(5000);
+            Thread listener = new Thread(() -> serve(server, config, mode));
+            listener.setDaemon(true);
+            listener.start();
+
+            try (java.net.Socket socket = new java.net.Socket("127.0.0.1", server.getLocalPort())) {
+                socket.setSoTimeout(5000);
+                return TunnelProbe.run(config, CdnFront.hostname(config),
+                        socket.getInputStream(), socket.getOutputStream(), new Random(3));
+            }
+        } catch (Exception failure) {
+            return new TunnelProbe.Result(TunnelProbe.Stage.NO_SOCKET, 0, failure.toString());
+        }
+    }
+
+    static void serve(java.net.ServerSocket server, ProxyConfig config, StubMode mode) {
+        try (java.net.Socket socket = server.accept()) {
+            socket.setSoTimeout(5000);
+            java.io.InputStream in = socket.getInputStream();
+            java.io.OutputStream out = socket.getOutputStream();
+
+            String request = Ws.readLine(in);
+            lastPath = request == null ? "" : request.split(" ")[1];
+            String key = null;
+            String line;
+            while ((line = Ws.readLine(in)) != null && !line.trim().isEmpty()) {
+                int colon = line.indexOf(':');
+                if (colon < 0) continue;
+                String name = line.substring(0, colon).trim();
+                String value = line.substring(colon + 1).trim();
+                if ("Sec-WebSocket-Key".equalsIgnoreCase(name)) key = value;
+                if ("Host".equalsIgnoreCase(name)) lastHost = value;
+            }
+            if (mode == StubMode.REFUSE) {
+                out.write("HTTP/1.1 400 Bad Request\r\n\r\n".getBytes("ISO-8859-1"));
+                out.flush();
+                return;
+            }
+            out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                    + "Connection: Upgrade\r\nSec-WebSocket-Accept: " + Ws.accept(key)
+                    + "\r\n\r\n").getBytes("ISO-8859-1"));
+            out.flush();
+
+            byte[] payload = readFrame(in);
+            if (payload == null) return;
+            if (mode == StubMode.SILENT) {
+                Thread.sleep(120);
+                return;                                     // opened, then nothing. The bad case.
+            }
+            if ("vless".equals(config.protocol)) {
+                byte[] expected = TunnelProbe.uuidBytes(config.id);
+                boolean matches = payload.length > 17;
+                for (int i = 0; matches && i < 16; i++) {
+                    if (payload[1 + i] != expected[i]) matches = false;
+                }
+                if (mode == StubMode.WRONG_UUID || !matches) return;
+                writeFrame(out, concat(new byte[] { 0, 0 },
+                        "HTTP/1.1 204 No Content\r\n\r\n".getBytes("ISO-8859-1")));
+            } else {
+                String head = new String(payload, 0, Math.min(56, payload.length), "ISO-8859-1");
+                if (!head.equals(TunnelProbe.hex(
+                        TunnelProbe.sha224(config.id.getBytes("UTF-8"))))) return;
+                writeFrame(out, "HTTP/1.1 204 No Content\r\n\r\n".getBytes("ISO-8859-1"));
+            }
+            out.flush();
+            Thread.sleep(80);
+        } catch (Exception ignored) {
+            // A stub that dies is a failed check somewhere else; nothing useful to say here.
+        }
+    }
+
+    static byte[] readFrame(java.io.InputStream in) throws java.io.IOException {
+        int first = in.read();
+        if (first < 0) return null;
+        int second = in.read();
+        if (second < 0) return null;
+        boolean masked = (second & 0x80) != 0;
+        int length = second & 0x7f;
+        if (length == 126) length = (in.read() << 8) | in.read();
+        byte[] mask = new byte[4];
+        if (masked) for (int i = 0; i < 4; i++) mask[i] = (byte) in.read();
+        byte[] payload = new byte[length];
+        int read = 0;
+        while (read < length) {
+            int got = in.read(payload, read, length - read);
+            if (got < 0) return null;
+            read += got;
+        }
+        if (masked) for (int i = 0; i < length; i++) payload[i] ^= mask[i & 3];
+        return payload;
+    }
+
+    static void writeFrame(java.io.OutputStream out, byte[] payload) throws java.io.IOException {
+        out.write(0x82);
+        out.write(payload.length);                          // stub payloads stay under 126
+        out.write(payload);
+        out.flush();
+    }
+
+    static byte[] concat(byte[] a, byte[] b) {
+        byte[] out = new byte[a.length + b.length];
+        System.arraycopy(a, 0, out, 0, a.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
     }
 
     // ---------------------------------------------------------------- harness

@@ -1,0 +1,64 @@
+name: android
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Make the wrapper executable
+        # Stored in git with mode 100644, which only shows up as permission denied minutes in.
+        run: chmod +x android/gradlew
+
+      - name: Build
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Name the artifact after the build
+        id: apk
+        run: |
+          set -euo pipefail
+          path="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)"
+          test -n "$path"
+          cp "$path" "scankite-debug.apk"
+          echo "path=scankite-debug.apk" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scankite-debug
+          path: scankite-debug.apk
+
+      - name: Keep the failure tail where it can be read back
+        # CI logs are not reachable from where this gets debugged, so a failing run commits its
+        # own tail to a branch instead of leaving the next fix to guesswork.
+        if: failure()
+        run: |
+          set -eu
+          mkdir -p /tmp/tail
+          find android -name '*.txt' -path '*build*' -newermt '-30 minutes' \
+            -exec tail -n 60 {} + > /tmp/tail/build.txt 2>/dev/null || true
+          echo "run ${GITHUB_RUN_ID} failed at $(date -u)" >> /tmp/tail/build.txt
+          git config user.name 'amirmahdavi2023 🪁'
+          git config user.email 'amirmahdavi2023@users.noreply.github.com'
+          git fetch origin ci-failures || true
+          git checkout -B ci-failures
+          mkdir -p ci
+          cp /tmp/tail/build.txt "ci/run-${GITHUB_RUN_ID}.txt"
+          git add ci
+          git commit -m "CI tail for run ${GITHUB_RUN_ID}" || exit 0
+          git push -f origin ci-failures

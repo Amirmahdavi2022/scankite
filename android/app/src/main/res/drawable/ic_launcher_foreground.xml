@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- a kite: four panels around a centre, with a tail -->
+    <path android:fillColor="#2DD4BF" android:pathData="M54,26 L70,44 L54,62 L38,44 Z" />
+    <path android:fillColor="#8B7CFF" android:pathData="M54,26 L70,44 L54,44 Z" />
+    <path android:fillColor="#0F766E" android:pathData="M38,44 L54,44 L54,62 Z" />
+    <path android:strokeColor="#8A97A8" android:strokeWidth="2" android:fillColor="#00000000"
+        android:pathData="M54,62 q 6,8 0,14 q -6,6 0,12" />
+</vector>

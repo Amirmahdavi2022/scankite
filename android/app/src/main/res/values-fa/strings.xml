@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">scankite</string>
+    <string name="tagline">دری پیدا می‌کند که از اینجا باز می‌شود</string>
+
+    <string name="start">کانفیگ پیدا کن</string>
+    <string name="stop">توقف</string>
+    <string name="again">دوباره بگرد</string>
+
+    <string name="phase_1">گرفتن فهرست آی‌پی‌ها</string>
+    <string name="phase_2">خواندن استخرهای عمومی</string>
+    <string name="phase_3">جست‌وجوی آی‌پی‌هایی که جواب می‌دهند</string>
+    <string name="phase_4">آزمایش واقعی کانفیگ‌ها</string>
+
+    <string name="idle_title">هنوز چیزی نیست</string>
+    <string name="idle_body">دکمه را بزن. خودش استخرهای عمومی را می‌خواند، فضای آی‌پی کلادفلر را از همین گوشی می‌گردد، و فقط کانفیگی را نگه می‌دارد که واقعاً جواب پس داده باشد.</string>
+
+    <string name="empty_pool_title">به استخرها نرسیدیم</string>
+    <string name="empty_pool_body">فهرست کانفیگ‌ها الان بسته یا خاموش است و نسخه‌ی ذخیره‌شده‌ای هم روی گوشی نیست. یک بار روی شبکه‌ی دیگری امتحان کن؛ بعد از یک اجرای موفق، از روی نسخه‌ی ذخیره‌شده کار می‌کند.</string>
+    <string name="empty_edge_title">هیچ آی‌پی جواب نداد</string>
+    <string name="empty_edge_body">هیچ آدرسی اصلاً جواب نداد. این معمولاً یعنی کل رنج اینجا بسته است، نه اینکه یک آدرس خراب باشد.</string>
+    <string name="empty_none_title">چیزی رد نشد</string>
+    <string name="empty_none_body">آدرس‌ها جواب دادند ولی هیچ کانفیگی ترافیک واقعی از داخلشان رد نکرد. اتصال باز می‌شود و بعد می‌میرد؛ این شکل اختلال است، نه سرور مرده.</string>
+
+    <string name="found_one">%1$d کانفیگ آماده</string>
+    <string name="found_many">%1$d کانفیگ آماده</string>
+    <string name="proved">تست‌شده</string>
+
+    <string name="copy">کپی</string>
+    <string name="copy_all">کپی همه</string>
+    <string name="copy_sub">کپی به شکل ساب</string>
+    <string name="share">اشتراک</string>
+    <string name="copied">کپی شد</string>
+    <string name="copied_all">%1$d کانفیگ کپی شد</string>
+
+    <string name="settings">تنظیمات</string>
+    <string name="tag_label">اسم خودت روی کانفیگ‌ها</string>
+    <string name="tag_hint">خالی بگذار تا بی‌اسم بماند</string>
+    <string name="tag_note">اسم کانالی که استخر روی کانفیگ زده در هر حالت پاک می‌شود. این فقط تعیین می‌کند چه چیزی جایش بنشیند.</string>
+    <string name="language">English</string>
+    <string name="save">ذخیره</string>
+
+    <string name="ms">%1$d میلی‌ثانیه</string>
+    <string name="via">از راه %1$s</string>
+    <string name="ranges_fallback">از فهرست آی‌پی داخلی استفاده شد</string>
+</resources>

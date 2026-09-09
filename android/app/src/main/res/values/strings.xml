@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">scankite</string>
+    <string name="tagline">Finds a door that works from here</string>
+
+    <string name="start">Find configs</string>
+    <string name="stop">Stop</string>
+    <string name="again">Search again</string>
+
+    <string name="phase_1">Getting the address list</string>
+    <string name="phase_2">Reading the public pools</string>
+    <string name="phase_3">Sweeping for addresses that answer</string>
+    <string name="phase_4">Proving configs end to end</string>
+
+    <string name="idle_title">Nothing yet</string>
+    <string name="idle_body">Tap the button. It reads the public pools, sweeps Cloudflare\'s address space from this phone, and only keeps configs that actually carried a reply.</string>
+
+    <string name="empty_pool_title">Could not reach the pools</string>
+    <string name="empty_pool_body">The config lists are blocked or offline right now, and there is no saved copy on this phone yet. Try once on another network — after one successful run it works from the saved copy.</string>
+    <string name="empty_edge_title">Nothing answered</string>
+    <string name="empty_edge_body">No address answered at all, which usually means the whole range is blocked here rather than a single address being bad.</string>
+    <string name="empty_none_title">Nothing got through</string>
+    <string name="empty_none_body">Addresses answered, but no config carried real traffic through them. The connections open and then die, which is what interference looks like rather than a dead server.</string>
+
+    <string name="found_one">%1$d config ready</string>
+    <string name="found_many">%1$d configs ready</string>
+    <string name="proved">proved</string>
+
+    <string name="copy">Copy</string>
+    <string name="copy_all">Copy all</string>
+    <string name="copy_sub">Copy as subscription</string>
+    <string name="share">Share</string>
+    <string name="copied">Copied</string>
+    <string name="copied_all">%1$d configs copied</string>
+
+    <string name="settings">Settings</string>
+    <string name="tag_label">Your own name on the configs</string>
+    <string name="tag_hint">leave empty for none</string>
+    <string name="tag_note">Whatever channel name the pool stamped on a config is removed either way. This only decides what goes on instead.</string>
+    <string name="language">فارسی</string>
+    <string name="save">Save</string>
+
+    <string name="ms">%1$d ms</string>
+    <string name="via">via %1$s</string>
+    <string name="ranges_fallback">Using the built-in address list</string>
+</resources>

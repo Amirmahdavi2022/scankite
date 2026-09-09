@@ -1,0 +1,44 @@
+plugins { id 'com.android.application' }
+
+// No dependencies at all. Not androidx, not Kotlin, not a material library.
+//
+// A previous project of ours lost an afternoon to appcompat dragging in a Kotlin stdlib that
+// collided with its own jdk7/jdk8 companions, for a screen the platform classes could draw on
+// their own. One screen does not need a support library, and every jar left out is one that
+// cannot break the build.
+dependencies { }
+
+android {
+    namespace 'works.jmc.scankite'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.amirmahdavi2023.scankite'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        // Generated from versionName so the two can never drift apart.
+        resValue 'string', 'app_version', "v" + versionName
+    }
+
+    // One copy of the core, shared with the plain-JVM test run in CI. Copying it into the app
+    // would let the tested version and the shipped version quietly diverge.
+    sourceSets {
+        main { java.srcDirs += ['../../core/src'] }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    lint { disable 'MissingTranslation' }
+}
