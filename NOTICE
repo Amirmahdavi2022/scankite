@@ -1,0 +1,21 @@
+scankite
+Copyright (C) 2026 amirmahdavi2023
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See LICENSE for the full text.
+
+If you redistribute this program, modified or not, the licence requires that
+this notice and the copyright above travel with it, and that the corresponding
+source is made available.
+
+Origins
+-------
+The config parser and the endpoint model started from the author's own work in
+Panther VPN (github.com/Amirmahdavi2022/Panther-VPN) and were extended here with
+vmess support, re-serialisation, and CDN fronting.
+
+No third-party configuration files are included in this repository. The public
+pool lists named in the source are read over the network at runtime, as data,
+the same way any subscription client reads them.
